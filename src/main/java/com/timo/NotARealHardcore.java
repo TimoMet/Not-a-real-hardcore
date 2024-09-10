@@ -8,6 +8,7 @@ import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
@@ -24,7 +25,7 @@ import static net.minecraft.server.command.CommandManager.*;
 
 public class NotARealHardcore implements ModInitializer {
 
-    private final int SPECTATOR_DURATION = 10 * 1000; // 1 hour in milliseconds
+    private final int SPECTATOR_DURATION = 3600 * 1000; // 1 hour in milliseconds
     private final int DEATH_MALUS = 2; // 1 = 1/2 heart
 
     private final ConcurrentHashMap<UUID, Long> playerSpectatorEndTimes = new ConcurrentHashMap<>();
@@ -77,6 +78,7 @@ public class NotARealHardcore implements ModInitializer {
         long endTime = System.currentTimeMillis() + SPECTATOR_DURATION;
         playerSpectatorEndTimes.put(playerUUID, endTime);
 
+        String playerName = serverPlayer.getName().getLiteralString();
         // Schedule task to revert to survival mode after 1 hour (3600 seconds)
         new Timer().schedule(new TimerTask() {
             @Override
@@ -85,11 +87,15 @@ public class NotARealHardcore implements ModInitializer {
                 if (player != null) {
                     respawnPlayer(player, playerUUID);
                 }
+                //message everyone
+                serverPlayer.getServer().getPlayerManager().getPlayerList().forEach(
+                        p -> p.sendMessage(Text.of(playerName + " is now back from the dead!"), false)
+                );
             }
         }, SPECTATOR_DURATION);
 
         //say it in chat
-        serverPlayer.sendMessage(Text.of("You have died! You will be in spectator mode for 1 hour."), true);
+        serverPlayer.sendMessage(Text.of("You have died! You will be in spectator mode for 1 hour."), false);
     }
 
     private void respawnPlayer(ServerPlayerEntity player, UUID playerUUID) {
@@ -103,14 +109,13 @@ public class NotARealHardcore implements ModInitializer {
             spawnPos = world.getSpawnPos();
         }
         player.teleport(world, spawnPos.getX(), spawnPos.getY(), spawnPos.getZ(), player.getYaw(), player.getPitch());
-        player.getServer().sendMessage(Text.of(player.getName() + " is now back from the dead!"));
-        // play sound
-        player.playSound(SoundEvents.BLOCK_BELL_RESONATE, 1.0F, 1.0F);
+        // play bell sound
+        player.playSoundToPlayer(SoundEvents.BLOCK_BELL_USE, SoundCategory.AMBIENT, 2.0F, 1.0F);
     }
 
 
     private void commandShowTime(ServerPlayerEntity player) {
-        player.sendMessage(Text.of(player.getName() + " has " + getFormattedTime(playerSpectatorEndTimes.get(player.getUuid()) - System.currentTimeMillis()) + " left in spectator mode."), false);
+        player.sendMessage(Text.of(player.getName().getLiteralString() + " has " + getFormattedTime(playerSpectatorEndTimes.get(player.getUuid()) - System.currentTimeMillis()) + " left in spectator mode."), false);
     }
 
     private String getFormattedTime(long time) {
